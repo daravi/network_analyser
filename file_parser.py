@@ -334,7 +334,8 @@ def read_devconn(file_list):
             devices[mac] = {"ip": ip, "mac": mac, "connection_type": connection_type,
                             "mfr": mfr, "model": model, "serial": serial,
                             "name": name, "location": location}
-    return devices
+    pd_devices = pd.DataFrame.from_dict(devices, orient='index')
+    return pd_devices
 
 
 def get_packet_drop_counts(file_list, devices):
@@ -369,7 +370,7 @@ def get_packet_drop_counts(file_list, devices):
                             "Could not read device identifier of type \"{0}\" at position {1} for log line:\n{2}\n".format(log_id, id_pos, line))
                         continue
                     # find mac from the device identifier
-                    for device_mac, info in devices.items():
+                    for device_mac, info in devices.iterrows():
                         if info[log_id]==id:
                             mac = device_mac
                             mac_found = True
@@ -386,8 +387,17 @@ def get_packet_drop_counts(file_list, devices):
                             warning("Could not find mac address for device with \"{0}\"={1} for log line:\n{2}\n".format(log_id, id, line))
                     # TODO: better regex to grab UDP vs TCP and port number
                     break
+    pd.DataFrame()
     return drop_counts
 
+
+
+def filter_device(logs, mac, filename=""):
+    if filename=="":
+        filename = os.path.join(os.getcwd(), "device_" + mac + "log")
+    with fileinput.input(file_list) as files:
+        for line in files:
+            if 
 
 # def get_mac(devices, line, log_obj):
 #     def trim_id(log_id, id_raw):
