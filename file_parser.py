@@ -338,66 +338,108 @@ def read_devconn(file_list):
     return pd_devices
 
 
-def get_packet_drop_counts(file_list, devices):
+def get_count(issue, logs, devices):
     """ network connection issue """
     # TODO: break down this function to multiple smaller parts
     # TODO: return a pandas DataFrame instead of a dictionary
+    def get_tables(log_objs):
+        tables = {}
+        log_ids = [log_obj["id"] for log_obj in log_objs if log_obj["id"] != "mac"]
+        for log_id in log_ids:
+            id_table = dict(zip(getattr(devices,log_id), devices.mac))
+            tables[log_id] = id_table
+        return tables
     def trim_id(log_id, id_raw):
         if log_id == "mac":
             return id_raw.replace(":", "").lower()
         else:
             return id_raw.lower()
-    drop_counts = {}
-    with fileinput.input(file_list) as files:
+
+    # compile lookup tables
+    tables = get_tables(patterns.issues[issue])
+    count = {}
+    with fileinput.input(logs) as files:
         for line in files:
-            # TODO differentiate between packetdrop (connection issue) and metadata drop (buffering issue - OoO)
             # check against all log objects that indicate network packet
-            for log_obj in patterns.log_types["packet_drop"]:
-                log_pattern = log_obj["pattern"]
-                # check if log line indicates packet drop
-                m_log = re.search(log_pattern, line)
+            for log_obj in patterns.issues[issue]:
+                log_re = log_obj["re"]
+                m_log = re.search(log_re, line)
+                # if log line idicates issue
                 if m_log:
-                    # get mac
-                    mac_found = False
+                    # read device identifier
                     log_id = log_obj["id"]
                     id_pos = log_obj["id_pos"]
-                    m_id = re.findall(patterns.general[log_id], line.lower())
-                    if len(m_id) >= id_pos+1:
-                        id_raw = m_id[id_pos][0]
+                    g_id = re.findall(patterns.general[log_id], line.lower())
+                    # if id found
+                    if len(g_id) >= id_pos+1:
+                        id_raw = g_id[id_pos][0] # findall returns a tuple with the complete group in first element
                         id = trim_id(log_id, id_raw)
                     else:
                         warning(
                             "Could not read device identifier of type \"{0}\" at position {1} for log line:\n{2}\n".format(log_id, id_pos, line))
                         continue
                     # find mac from the device identifier
-                    for device_mac, info in devices.iterrows():
-                        if info[log_id]==id:
-                            mac = device_mac
-                            mac_found = True
-                            break     
-                    if mac_found:
-                        # increment drop count
-                        drop_counts.setdefault(mac, 0)
-                        drop_counts[mac] += 1
+                    mac_found = False
+                    if (log_id=="mac"):
+                        mac = id
+                        mac_found = bool(mac)
                     else:
-                        # get_mac(devices, line, log_obj)
-                        # TODO: figure out what is 0.0.0.0 for e.g.
-                        # 2018-10-05 07:00:21 WARN  : ? : RTP RX MissingPacket(s) 1 on RtpOverRtsp:0/1/SSRC:1717395308(665d5f6c) from 0.0.0.0/SSRC:3543483746(d3354562) / Thread IoService.TransportCtrl [logNum 74]
+                        mac = tables[log_id].get(id)
+                        mac_found = bool(mac)
+
+                    if (not mac_found):
                         if (id!="0.0.0.0"):
+                            # TODO: figure out what is 0.0.0.0 (Null) used for in the logs. e.g.
+                            # 2018-10-05 07:00:21 WARN  : ? : RTP RX MissingPacket(s) 1 on RtpOverRtsp:0/1/SSRC:1717395308(665d5f6c) from 0.0.0.0/SSRC:3543483746(d3354562) / Thread IoService.TransportCtrl [logNum 74]
                             warning("Could not find mac address for device with \"{0}\"={1} for log line:\n{2}\n".format(log_id, id, line))
+                    else:
+                        # increment drop count
+                        count.setdefault(mac, 0)
+                        count[mac] += 1
                     # TODO: better regex to grab UDP vs TCP and port number
-                    break
-    pd.DataFrame()
-    return drop_counts
+                    break    
+    sr_count = pd.Series(count)
+    return sr_count.sort_values(ascending=False)
 
 
+def parse_line(line, log_type):
+    for ptrn in patterns.logs[log_type]:
+        if m:
+            time = ...
+            desc = patterns.logs[log_type]["description"]
+            return time, descr
+    print(line)
+    return time, descr
 
-def filter_device(logs, mac, filename=""):
+def sort_logs(log_types, root="."):
+    for log_type in log_types:
+        logs = get_matched_files(log_type, root)
+        with fileinput.input(logs) as files:
+            for line in files:
+                time, descr = parse_line(line, log_type)
+                # append new row to parsed_logs        
+    return None # return sorted parsed_logs
+
+
+def device_filter(mac, ip_timeline, sorted_logs_df, f):
+    pass
+
+
+def filter_device(logs, mac, current_ip, filename=""):
     if filename=="":
         filename = os.path.join(os.getcwd(), "device_" + mac + "log")
-    with fileinput.input(file_list) as files:
+    # open file
+    # set ip to current ip
+    with fileinput.input(filename) as files:
+        # sort lines by data
         for line in files:
-            if 
+            break
+            # if line is first_connection or ip_changed:
+                # update ip_timeline
+                # set ip to ip
+            # if line contains ip or mac:
+                # append line to file
+    # close file
 
 # def get_mac(devices, line, log_obj):
 #     def trim_id(log_id, id_raw):
